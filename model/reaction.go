@@ -1,5 +1,5 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 package model
 
@@ -27,9 +27,8 @@ func ReactionFromJson(data io.Reader) *Reaction {
 
 	if err := json.NewDecoder(data).Decode(&o); err != nil {
 		return nil
-	} else {
-		return &o
 	}
+	return &o
 }
 
 func ReactionsToJson(o []*Reaction) string {
@@ -48,9 +47,8 @@ func MapPostIdToReactionsFromJson(data io.Reader) map[string][]*Reaction {
 	var objmap map[string][]*Reaction
 	if err := decoder.Decode(&objmap); err != nil {
 		return make(map[string][]*Reaction)
-	} else {
-		return objmap
 	}
+	return objmap
 }
 
 func ReactionsFromJson(data io.Reader) []*Reaction {
@@ -58,17 +56,16 @@ func ReactionsFromJson(data io.Reader) []*Reaction {
 
 	if err := json.NewDecoder(data).Decode(&o); err != nil {
 		return nil
-	} else {
-		return o
 	}
+	return o
 }
 
 func (o *Reaction) IsValid() *AppError {
-	if len(o.UserId) != 26 {
+	if !IsValidId(o.UserId) {
 		return NewAppError("Reaction.IsValid", "model.reaction.is_valid.user_id.app_error", nil, "user_id="+o.UserId, http.StatusBadRequest)
 	}
 
-	if len(o.PostId) != 26 {
+	if !IsValidId(o.PostId) {
 		return NewAppError("Reaction.IsValid", "model.reaction.is_valid.post_id.app_error", nil, "post_id="+o.PostId, http.StatusBadRequest)
 	}
 

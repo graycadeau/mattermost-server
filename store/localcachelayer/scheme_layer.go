@@ -1,11 +1,11 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// See LICENSE.txt for license information.
 
 package localcachelayer
 
 import (
-	"github.com/mattermost/mattermost-server/model"
-	"github.com/mattermost/mattermost-server/store"
+	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/store"
 )
 
 type LocalCacheSchemeStore struct {
@@ -14,23 +14,24 @@ type LocalCacheSchemeStore struct {
 }
 
 func (s *LocalCacheSchemeStore) handleClusterInvalidateScheme(msg *model.ClusterMessage) {
-	if msg.Data == CLEAR_CACHE_MESSAGE_DATA {
+	if msg.Data == ClearCacheMessageData {
 		s.rootStore.schemeCache.Purge()
 	} else {
 		s.rootStore.schemeCache.Remove(msg.Data)
 	}
 }
 
-func (s LocalCacheSchemeStore) Save(scheme *model.Scheme) (*model.Scheme, *model.AppError) {
-	if len(scheme.Id) != 0 {
+func (s LocalCacheSchemeStore) Save(scheme *model.Scheme) (*model.Scheme, error) {
+	if scheme.Id != "" {
 		defer s.rootStore.doInvalidateCacheCluster(s.rootStore.schemeCache, scheme.Id)
 	}
 	return s.SchemeStore.Save(scheme)
 }
 
-func (s LocalCacheSchemeStore) Get(schemeId string) (*model.Scheme, *model.AppError) {
-	if scheme := s.rootStore.doStandardReadCache(s.rootStore.schemeCache, schemeId); scheme != nil {
-		return scheme.(*model.Scheme), nil
+func (s LocalCacheSchemeStore) Get(schemeId string) (*model.Scheme, error) {
+	var scheme *model.Scheme
+	if err := s.rootStore.doStandardReadCache(s.rootStore.schemeCache, schemeId, &scheme); err == nil {
+		return scheme, nil
 	}
 
 	scheme, err := s.SchemeStore.Get(schemeId)
@@ -43,16 +44,16 @@ func (s LocalCacheSchemeStore) Get(schemeId string) (*model.Scheme, *model.AppEr
 	return scheme, nil
 }
 
-func (s LocalCacheSchemeStore) Delete(schemeId string) (*model.Scheme, *model.AppError) {
+func (s LocalCacheSchemeStore) Delete(schemeId string) (*model.Scheme, error) {
 	defer s.rootStore.doInvalidateCacheCluster(s.rootStore.schemeCache, schemeId)
 	defer s.rootStore.doClearCacheCluster(s.rootStore.roleCache)
-
+	defer s.rootStore.doClearCacheCluster(s.rootStore.rolePermissionsCache)
 	return s.SchemeStore.Delete(schemeId)
 }
 
-func (s LocalCacheSchemeStore) PermanentDeleteAll() *model.AppError {
+func (s LocalCacheSchemeStore) PermanentDeleteAll() error {
 	defer s.rootStore.doClearCacheCluster(s.rootStore.schemeCache)
 	defer s.rootStore.doClearCacheCluster(s.rootStore.roleCache)
-
+	defer s.rootStore.doClearCacheCluster(s.rootStore.rolePermissionsCache)
 	return s.SchemeStore.PermanentDeleteAll()
 }

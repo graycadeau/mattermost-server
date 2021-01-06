@@ -1,9 +1,10 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// See LICENSE.txt for license information.
 
 package model
 
 import (
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -213,7 +214,7 @@ func parseSearchFlags(input []string) ([]searchWord, []flag) {
 			// and remove extra pound #s
 			word = hashtagStart.ReplaceAllString(word, "#")
 
-			if len(word) != 0 {
+			if word != "" {
 				words = append(words, searchWord{
 					word,
 					exclude,
@@ -344,9 +345,9 @@ func ParseSearchParams(text string, timeZoneOffset int) []*SearchParams {
 		len(excludedPlainTerms) == 0 && len(excludedHashtagTerms) == 0 &&
 		(len(inChannels) != 0 || len(fromUsers) != 0 ||
 			len(excludedChannels) != 0 || len(excludedUsers) != 0 ||
-			len(afterDate) != 0 || len(excludedAfterDate) != 0 ||
-			len(beforeDate) != 0 || len(excludedBeforeDate) != 0 ||
-			len(onDate) != 0 || len(excludedDate) != 0) {
+			afterDate != "" || excludedAfterDate != "" ||
+			beforeDate != "" || excludedBeforeDate != "" ||
+			onDate != "" || excludedDate != "") {
 		paramsList = append(paramsList, &SearchParams{
 			Terms:              "",
 			ExcludedTerms:      "",
@@ -366,4 +367,14 @@ func ParseSearchParams(text string, timeZoneOffset int) []*SearchParams {
 	}
 
 	return paramsList
+}
+
+func IsSearchParamsListValid(paramsList []*SearchParams) *AppError {
+	// All SearchParams should have same IncludeDeletedChannels value.
+	for _, params := range paramsList {
+		if params.IncludeDeletedChannels != paramsList[0].IncludeDeletedChannels {
+			return NewAppError("IsSearchParamsListValid", "model.search_params_list.is_valid.include_deleted_channels.app_error", nil, "", http.StatusInternalServerError)
+		}
+	}
+	return nil
 }

@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 package storetest
 
@@ -17,11 +17,11 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 
-	"github.com/mattermost/mattermost-server/model"
+	"github.com/mattermost/mattermost-server/v5/model"
 )
 
 const (
-	defaultMysqlDSN      = "mmuser:mostest@tcp(localhost:3306)/mattermost_test?charset=utf8mb4,utf8\u0026readTimeout=30s\u0026writeTimeout=30s"
+	defaultMysqlDSN      = "mmuser:mostest@tcp(localhost:3306)/mattermost_test?charset=utf8mb4,utf8&readTimeout=30s&writeTimeout=30s&multiStatements=true"
 	defaultPostgresqlDSN = "postgres://mmuser:mostest@localhost:5432/mattermost_test?sslmode=disable&connect_timeout=10"
 	defaultMysqlRootPWD  = "mostest"
 )
@@ -29,9 +29,8 @@ const (
 func getEnv(name, defaultValue string) string {
 	if value := os.Getenv(name); value != "" {
 		return value
-	} else {
-		return defaultValue
 	}
+	return defaultValue
 }
 
 func log(message string) {

@@ -1,24 +1,26 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// See LICENSE.txt for license information.
 
 package web
 
 import (
 	b64 "encoding/base64"
 	"net/http"
+	"strconv"
 	"strings"
 
-	"github.com/mattermost/mattermost-server/mlog"
-	"github.com/mattermost/mattermost-server/model"
+	"github.com/mattermost/mattermost-server/v5/audit"
+	"github.com/mattermost/mattermost-server/v5/mlog"
+	"github.com/mattermost/mattermost-server/v5/model"
 )
 
 func (w *Web) InitSaml() {
-	w.MainRouter.Handle("/login/sso/saml", w.NewHandler(loginWithSaml)).Methods("GET")
-	w.MainRouter.Handle("/login/sso/saml", w.NewHandler(completeSaml)).Methods("POST")
+	w.MainRouter.Handle("/login/sso/saml", w.ApiHandler(loginWithSaml)).Methods("GET")
+	w.MainRouter.Handle("/login/sso/saml", w.ApiHandlerTrustRequester(completeSaml)).Methods("POST")
 }
 
 func loginWithSaml(c *Context, w http.ResponseWriter, r *http.Request) {
-	samlInterface := c.App.Saml
+	samlInterface := c.App.Saml()
 
 	if samlInterface == nil {
 		c.Err = model.NewAppError("loginWithSaml", "api.user.saml.not_available.app_error", nil, "", http.StatusFound)
@@ -31,11 +33,12 @@ func loginWithSaml(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	action := r.URL.Query().Get("action")
+	isMobile := action == model.OAUTH_ACTION_MOBILE
 	redirectTo := r.URL.Query().Get("redirect_to")
 	relayProps := map[string]string{}
 	relayState := ""
 
-	if len(action) != 0 {
+	if action != "" {
 		relayProps["team_id"] = teamId
 		relayProps["action"] = action
 		if action == model.OAUTH_ACTION_EMAIL_TO_SSO {
@@ -43,25 +46,27 @@ func loginWithSaml(c *Context, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if len(redirectTo) != 0 {
+	if redirectTo != "" {
 		relayProps["redirect_to"] = redirectTo
 	}
+
+	relayProps[model.USER_AUTH_SERVICE_IS_MOBILE] = strconv.FormatBool(isMobile)
 
 	if len(relayProps) > 0 {
 		relayState = b64.StdEncoding.EncodeToString([]byte(model.MapToJson(relayProps)))
 	}
 
-	if data, err := samlInterface.BuildRequest(relayState); err != nil {
+	data, err := samlInterface.BuildRequest(relayState)
+	if err != nil {
 		c.Err = err
 		return
-	} else {
-		w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
-		http.Redirect(w, r, data.URL, http.StatusFound)
 	}
+	w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
+	http.Redirect(w, r, data.URL, http.StatusFound)
 }
 
 func completeSaml(c *Context, w http.ResponseWriter, r *http.Request) {
-	samlInterface := c.App.Saml
+	samlInterface := c.App.Saml()
 
 	if samlInterface == nil {
 		c.Err = model.NewAppError("completeSaml", "api.user.saml.not_available.app_error", nil, "", http.StatusFound)
@@ -75,17 +80,25 @@ func completeSaml(c *Context, w http.ResponseWriter, r *http.Request) {
 	relayProps := make(map[string]string)
 	if len(relayState) > 0 {
 		stateStr := ""
-		if b, err := b64.StdEncoding.DecodeString(relayState); err != nil {
+		b, err := b64.StdEncoding.DecodeString(relayState)
+		if err != nil {
 			c.Err = model.NewAppError("completeSaml", "api.user.authorize_oauth_user.invalid_state.app_error", nil, err.Error(), http.StatusFound)
 			return
-		} else {
-			stateStr = string(b)
 		}
+		stateStr = string(b)
 		relayProps = model.MapFromJson(strings.NewReader(stateStr))
 	}
 
+	auditRec := c.MakeAuditRecord("completeSaml", audit.Fail)
+	defer c.LogAuditRec(auditRec)
+	c.LogAudit("attempt")
+
 	action := relayProps["action"]
-	if user, err := samlInterface.DoLogin(encodedXML, relayProps); err != nil {
+	auditRec.AddMeta("action", action)
+
+	user, err := samlInterface.DoLogin(encodedXML, relayProps)
+	if err != nil {
+		c.LogAudit("fail")
 		if action == model.OAUTH_ACTION_MOBILE {
 			err.Translate(c.App.T)
 			w.Write([]byte(err.ToJson()))
@@ -94,60 +107,68 @@ func completeSaml(c *Context, w http.ResponseWriter, r *http.Request) {
 			c.Err.StatusCode = http.StatusFound
 		}
 		return
-	} else {
-		if err := c.App.CheckUserAllAuthenticationCriteria(user, ""); err != nil {
-			c.Err = err
-			c.Err.StatusCode = http.StatusFound
-			return
-		}
+	}
 
-		switch action {
-		case model.OAUTH_ACTION_SIGNUP:
-			teamId := relayProps["team_id"]
-			if len(teamId) > 0 {
-				c.App.Srv.Go(func() {
-					if err := c.App.AddUserToTeamByTeamId(teamId, user); err != nil {
-						mlog.Error(err.Error())
-					} else {
-						c.App.AddDirectChannels(teamId, user)
-					}
-				})
-			}
-		case model.OAUTH_ACTION_EMAIL_TO_SSO:
-			if err := c.App.RevokeAllSessions(user.Id); err != nil {
-				c.Err = err
-				return
-			}
-			c.LogAuditWithUserId(user.Id, "Revoked all sessions for user")
-			c.App.Srv.Go(func() {
-				if err := c.App.SendSignInChangeEmail(user.Email, strings.Title(model.USER_AUTH_SERVICE_SAML)+" SSO", user.Locale, c.App.GetSiteURL()); err != nil {
-					mlog.Error(err.Error())
-				}
-			})
-		}
+	if err = c.App.CheckUserAllAuthenticationCriteria(user, ""); err != nil {
+		c.Err = err
+		c.Err.StatusCode = http.StatusFound
+		return
+	}
 
-		session, err := c.App.DoLogin(w, r, user, "")
-		if err != nil {
+	switch action {
+	case model.OAUTH_ACTION_SIGNUP:
+		if teamId := relayProps["team_id"]; teamId != "" {
+			if err = c.App.AddUserToTeamByTeamId(teamId, user); err != nil {
+				c.LogErrorByCode(err)
+				break
+			}
+			c.App.AddDirectChannels(teamId, user)
+		}
+	case model.OAUTH_ACTION_EMAIL_TO_SSO:
+		if err = c.App.RevokeAllSessions(user.Id); err != nil {
 			c.Err = err
 			return
 		}
+		auditRec.AddMeta("revoked_user_id", user.Id)
+		auditRec.AddMeta("revoked", "Revoked all sessions for user")
 
-		c.App.AttachSessionCookies(w, r, session)
+		c.LogAuditWithUserId(user.Id, "Revoked all sessions for user")
+		c.App.Srv().Go(func() {
+			if err = c.App.Srv().EmailService.SendSignInChangeEmail(user.Email, strings.Title(model.USER_AUTH_SERVICE_SAML)+" SSO", user.Locale, c.App.GetSiteURL()); err != nil {
+				c.LogErrorByCode(err)
+			}
+		})
+	}
 
-		c.App.Session = *session
+	auditRec.AddMeta("obtained_user_id", user.Id)
+	c.LogAuditWithUserId(user.Id, "obtained user")
 
-		if val, ok := relayProps["redirect_to"]; ok {
-			http.Redirect(w, r, c.GetSiteURLHeader()+val, http.StatusFound)
-			return
-		}
+	isMobile, parseErr := strconv.ParseBool(relayProps[model.USER_AUTH_SERVICE_IS_MOBILE])
+	if parseErr != nil {
+		mlog.Warn("Error parsing boolean property from relay props", mlog.Err(parseErr))
+	}
+	err = c.App.DoLogin(w, r, user, "", isMobile, false, true)
+	if err != nil {
+		c.Err = err
+		return
+	}
 
-		switch action {
-		case model.OAUTH_ACTION_MOBILE:
-			ReturnStatusOK(w)
-		case model.OAUTH_ACTION_EMAIL_TO_SSO:
-			http.Redirect(w, r, c.GetSiteURLHeader()+"/login?extra=signin_change", http.StatusFound)
-		default:
-			http.Redirect(w, r, c.GetSiteURLHeader(), http.StatusFound)
-		}
+	auditRec.Success()
+	c.LogAuditWithUserId(user.Id, "success")
+
+	c.App.AttachSessionCookies(w, r)
+
+	if val, ok := relayProps["redirect_to"]; ok {
+		http.Redirect(w, r, c.GetSiteURLHeader()+val, http.StatusFound)
+		return
+	}
+
+	switch action {
+	case model.OAUTH_ACTION_MOBILE:
+		ReturnStatusOK(w)
+	case model.OAUTH_ACTION_EMAIL_TO_SSO:
+		http.Redirect(w, r, c.GetSiteURLHeader()+"/login?extra=signin_change", http.StatusFound)
+	default:
+		http.Redirect(w, r, c.GetSiteURLHeader(), http.StatusFound)
 	}
 }

@@ -1,21 +1,18 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// See LICENSE.txt for license information.
 
 package commands
 
 import (
-	"github.com/mattermost/mattermost-server/app"
-	"github.com/mattermost/mattermost-server/model"
-	"github.com/mattermost/mattermost-server/utils"
-	"github.com/mattermost/viper"
+	"github.com/mattermost/mattermost-server/v5/app"
+	"github.com/mattermost/mattermost-server/v5/config"
+	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/utils"
 	"github.com/spf13/cobra"
 )
 
 func InitDBCommandContextCobra(command *cobra.Command) (*app.App, error) {
-	config := viper.GetString("config")
-
-	a, err := InitDBCommandContext(config)
-
+	a, err := InitDBCommandContext(getConfigDSN(command, config.GetEnvironment()))
 	if err != nil {
 		// Returning an error just prints the usage message, so actually panic
 		panic(err)
@@ -34,18 +31,19 @@ func InitDBCommandContext(configDSN string) (*app.App, error) {
 	model.AppErrorInit(utils.T)
 
 	s, err := app.NewServer(
-		app.Config(configDSN, false),
-		app.StartElasticsearch,
+		app.Config(configDSN, false, nil),
+		app.StartSearchEngine,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	a := s.FakeApp()
+	a := app.New(app.ServerConnector(s))
 
 	if model.BuildEnterpriseReady == "true" {
-		a.LoadLicense()
+		a.Srv().LoadLicense()
 	}
+	a.InitServer()
 
 	return a, nil
 }

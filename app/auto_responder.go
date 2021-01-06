@@ -1,29 +1,36 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// See LICENSE.txt for license information.
 
 package app
 
 import (
-	"github.com/mattermost/mattermost-server/mlog"
-	"github.com/mattermost/mattermost-server/model"
+	"github.com/mattermost/mattermost-server/v5/model"
 )
 
-func (a *App) SendAutoResponseIfNecessary(channel *model.Channel, sender *model.User) (bool, *model.AppError) {
+func (a *App) SendAutoResponseIfNecessary(channel *model.Channel, sender *model.User, post *model.Post) (bool, *model.AppError) {
 	if channel.Type != model.CHANNEL_DIRECT {
 		return false, nil
 	}
 
+	if sender.IsBot {
+		return false, nil
+	}
+
 	receiverId := channel.GetOtherUserIdForDM(sender.Id)
+	if receiverId == "" {
+		// User direct messaged themself, let them test their auto-responder.
+		receiverId = sender.Id
+	}
 
 	receiver, err := a.GetUser(receiverId)
 	if err != nil {
 		return false, err
 	}
 
-	return a.SendAutoResponse(channel, receiver)
+	return a.SendAutoResponse(channel, receiver, post)
 }
 
-func (a *App) SendAutoResponse(channel *model.Channel, receiver *model.User) (bool, *model.AppError) {
+func (a *App) SendAutoResponse(channel *model.Channel, receiver *model.User, post *model.Post) (bool, *model.AppError) {
 	if receiver == nil || receiver.NotifyProps == nil {
 		return false, nil
 	}
@@ -35,17 +42,20 @@ func (a *App) SendAutoResponse(channel *model.Channel, receiver *model.User) (bo
 		return false, nil
 	}
 
+	rootID := post.Id
+	if post.RootId != "" {
+		rootID = post.RootId
+	}
+
 	autoResponderPost := &model.Post{
 		ChannelId: channel.Id,
 		Message:   message,
-		RootId:    "",
-		ParentId:  "",
+		RootId:    rootID,
 		Type:      model.POST_AUTO_RESPONDER,
 		UserId:    receiver.Id,
 	}
 
-	if _, err := a.CreatePost(autoResponderPost, channel, false); err != nil {
-		mlog.Error(err.Error())
+	if _, err := a.CreatePost(autoResponderPost, channel, false, false); err != nil {
 		return false, err
 	}
 

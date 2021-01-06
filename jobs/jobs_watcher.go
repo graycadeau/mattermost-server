@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 package jobs
 
@@ -7,13 +7,13 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/mattermost/mattermost-server/mlog"
-	"github.com/mattermost/mattermost-server/model"
+	"github.com/mattermost/mattermost-server/v5/mlog"
+	"github.com/mattermost/mattermost-server/v5/model"
 )
 
 // Default polling interval for jobs termination.
 // (Defining as `var` rather than `const` allows tests to lower the interval.)
-var DEFAULT_WATCHER_POLLING_INTERVAL = 15000
+var DefaultWatcherPollingInterval = 15000
 
 type Watcher struct {
 	srv     *JobServer
@@ -100,6 +100,13 @@ func (watcher *Watcher) PollAndNotify() {
 				default:
 				}
 			}
+		} else if job.Type == model.JOB_TYPE_BLEVE_POST_INDEXING {
+			if watcher.workers.BleveIndexing != nil {
+				select {
+				case watcher.workers.BleveIndexing.JobChannel() <- *job:
+				default:
+				}
+			}
 		} else if job.Type == model.JOB_TYPE_LDAP_SYNC {
 			if watcher.workers.LdapSync != nil {
 				select {
@@ -118,6 +125,41 @@ func (watcher *Watcher) PollAndNotify() {
 			if watcher.workers.Plugins != nil {
 				select {
 				case watcher.workers.Plugins.JobChannel() <- *job:
+				default:
+				}
+			}
+		} else if job.Type == model.JOB_TYPE_EXPIRY_NOTIFY {
+			if watcher.workers.ExpiryNotify != nil {
+				select {
+				case watcher.workers.ExpiryNotify.JobChannel() <- *job:
+				default:
+				}
+			}
+		} else if job.Type == model.JOB_TYPE_PRODUCT_NOTICES {
+			if watcher.workers.ProductNotices != nil {
+				select {
+				case watcher.workers.ProductNotices.JobChannel() <- *job:
+				default:
+				}
+			}
+		} else if job.Type == model.JOB_TYPE_ACTIVE_USERS {
+			if watcher.workers.ActiveUsers != nil {
+				select {
+				case watcher.workers.ActiveUsers.JobChannel() <- *job:
+				default:
+				}
+			}
+		} else if job.Type == model.JOB_TYPE_IMPORT_PROCESS {
+			if watcher.workers.ImportProcess != nil {
+				select {
+				case watcher.workers.ImportProcess.JobChannel() <- *job:
+				default:
+				}
+			}
+		} else if job.Type == model.JOB_TYPE_CLOUD {
+			if watcher.workers.Cloud != nil {
+				select {
+				case watcher.workers.Cloud.JobChannel() <- *job:
 				default:
 				}
 			}

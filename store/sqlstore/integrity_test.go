@@ -1,5 +1,5 @@
-// Copyright (c) 2019-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 package sqlstore
 
@@ -8,16 +8,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/mattermost/mattermost-server/model"
-	"github.com/mattermost/mattermost-server/store"
+	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/store"
 )
 
 func createAudit(ss store.Store, userId, sessionId string) *model.Audit {
 	audit := model.Audit{
-		UserId: userId,
+		UserId:    userId,
 		SessionId: sessionId,
 		IpAddress: "ipaddress",
-		Action: "Action",
+		Action:    "Action",
 	}
 	ss.Audit().Save(&audit)
 	return &audit
@@ -46,7 +46,7 @@ func createChannelWithSchemeId(ss store.Store, schemeId *string) *model.Channel 
 	return c
 }
 
-func createCommand(ss store.Store, userId, teamId string) * model.Command {
+func createCommand(ss store.Store, userId, teamId string) *model.Command {
 	m := model.Command{}
 	m.CreatorId = userId
 	m.Method = model.COMMAND_METHOD_POST
@@ -75,19 +75,15 @@ func createChannelMemberHistory(ss store.Store, channelId, userId string) *model
 }
 
 func createChannelWithTeamId(ss store.Store, id string) *model.Channel {
-	return createChannel(ss, id, model.NewId());
+	return createChannel(ss, id, model.NewId())
 }
 
 func createChannelWithCreatorId(ss store.Store, id string) *model.Channel {
-	return createChannel(ss, model.NewId(), id);
+	return createChannel(ss, model.NewId(), id)
 }
 
 func createChannelMemberWithChannelId(ss store.Store, id string) *model.ChannelMember {
-	return createChannelMember(ss, id, model.NewId());
-}
-
-func createChannelMemberWithUserId(ss store.Store, id string) *model.ChannelMember {
-	return createChannelMember(ss, model.NewId(), id);
+	return createChannelMember(ss, id, model.NewId())
 }
 
 func createCommandWebhook(ss store.Store, commandId, userId, channelId string) *model.CommandWebhook {
@@ -192,20 +188,20 @@ func createPost(ss store.Store, channelId, userId, rootId, parentId string) *mod
 }
 
 func createPostWithChannelId(ss store.Store, id string) *model.Post {
-	return createPost(ss, id, model.NewId(), "", "");
+	return createPost(ss, id, model.NewId(), "", "")
 }
 
 func createPostWithUserId(ss store.Store, id string) *model.Post {
-	return createPost(ss, model.NewId(), id, "", "");
+	return createPost(ss, model.NewId(), id, "", "")
 }
 
 func createPreferences(ss store.Store, userId string) *model.Preferences {
 	preferences := model.Preferences{
 		{
-			UserId: userId,
-			Name: model.NewId(),
+			UserId:   userId,
+			Name:     model.NewId(),
 			Category: model.PREFERENCE_CATEGORY_DIRECT_CHANNEL_SHOW,
-			Value: "somevalue",
+			Value:    "somevalue",
 		},
 	}
 	ss.Preference().Save(&preferences)
@@ -306,7 +302,7 @@ func createTeam(ss store.Store, userId string) *model.Team {
 	m.DisplayName = "DisplayName"
 	m.Type = model.TEAM_OPEN
 	m.Email = "test@example.com"
-	m.Name = "z-z-z" + model.NewId() + "b"
+	m.Name = "z-z-z" + model.NewRandomTeamName() + "b"
 	t, _ := ss.Team().Save(&m)
 	return t
 }
@@ -333,7 +329,7 @@ func createTeamWithSchemeId(ss store.Store, schemeId *string) *model.Team {
 func createUser(ss store.Store) *model.User {
 	m := model.User{}
 	m.Username = model.NewId()
-	m.Email = "test@example.com"
+	m.Email = m.Username + "@example.com"
 	user, _ := ss.User().Save(&m)
 	return user
 }
@@ -353,11 +349,11 @@ func TestCheckIntegrity(t *testing.T) {
 			results := ss.CheckIntegrity()
 			require.NotNil(t, results)
 			for result := range results {
-				require.IsType(t, store.IntegrityCheckResult{}, result)
+				require.IsType(t, model.IntegrityCheckResult{}, result)
 				require.Nil(t, result.Err)
 				switch data := result.Data.(type) {
-				case store.RelationalIntegrityCheckData:
-					require.Len(t, data.Records, 0)
+				case model.RelationalIntegrityCheckData:
+					require.Empty(t, data.Records)
 				}
 			}
 		})
@@ -366,15 +362,15 @@ func TestCheckIntegrity(t *testing.T) {
 
 func TestCheckParentChildIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
+		store := ss.(*SqlStore)
 		t.Run("should receive an error", func(t *testing.T) {
 			config := relationalCheckConfig{
-				parentName: "NotValid",
+				parentName:   "NotValid",
 				parentIdAttr: "NotValid",
-				childName: "NotValid",
-				childIdAttr: "NotValid",
+				childName:    "NotValid",
+				childIdAttr:  "NotValid",
 			}
-			result := checkParentChildIntegrity(supplier, config)
+			result := checkParentChildIntegrity(store, config)
 			require.NotNil(t, result.Err)
 			require.Empty(t, result.Data)
 		})
@@ -383,26 +379,26 @@ func TestCheckParentChildIntegrity(t *testing.T) {
 
 func TestCheckChannelsCommandWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkChannelsCommandWebhooksIntegrity(supplier)
+			result := checkChannelsCommandWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			channelId := model.NewId()
 			cwh := createCommandWebhook(ss, model.NewId(), model.NewId(), channelId)
-			result := checkChannelsCommandWebhooksIntegrity(supplier)
+			result := checkChannelsCommandWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: channelId,
-				ChildId: cwh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &channelId,
+				ChildId:  &cwh.Id,
 			}, data.Records[0])
 			dbmap.Delete(cwh)
 		})
@@ -411,14 +407,14 @@ func TestCheckChannelsCommandWebhooksIntegrity(t *testing.T) {
 
 func TestCheckChannelsChannelMemberHistoryIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkChannelsChannelMemberHistoryIntegrity(supplier)
+			result := checkChannelsChannelMemberHistoryIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -426,12 +422,12 @@ func TestCheckChannelsChannelMemberHistoryIntegrity(t *testing.T) {
 			user := createUser(ss)
 			cmh := createChannelMemberHistory(ss, channel.Id, user.Id)
 			dbmap.Delete(channel)
-			result := checkChannelsChannelMemberHistoryIntegrity(supplier)
+			result := checkChannelsChannelMemberHistoryIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: cmh.ChannelId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &cmh.ChannelId,
 			}, data.Records[0])
 			dbmap.Delete(user)
 			dbmap.Exec(`DELETE FROM ChannelMemberHistory`)
@@ -441,26 +437,26 @@ func TestCheckChannelsChannelMemberHistoryIntegrity(t *testing.T) {
 
 func TestCheckChannelsChannelMembersIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkChannelsChannelMembersIntegrity(supplier)
+			result := checkChannelsChannelMembersIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			channel := createChannel(ss, model.NewId(), model.NewId())
 			member := createChannelMemberWithChannelId(ss, channel.Id)
 			dbmap.Delete(channel)
-			result := checkChannelsChannelMembersIntegrity(supplier)
+			result := checkChannelsChannelMembersIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: member.ChannelId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &member.ChannelId,
 			}, data.Records[0])
 			ss.Channel().PermanentDeleteMembersByChannel(member.ChannelId)
 		})
@@ -469,26 +465,26 @@ func TestCheckChannelsChannelMembersIntegrity(t *testing.T) {
 
 func TestCheckChannelsIncomingWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkChannelsIncomingWebhooksIntegrity(supplier)
+			result := checkChannelsIncomingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			channelId := model.NewId()
 			wh := createIncomingWebhook(ss, model.NewId(), channelId, model.NewId())
-			result := checkChannelsIncomingWebhooksIntegrity(supplier)
+			result := checkChannelsIncomingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: channelId,
-				ChildId: wh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &channelId,
+				ChildId:  &wh.Id,
 			}, data.Records[0])
 			dbmap.Delete(wh)
 		})
@@ -497,14 +493,14 @@ func TestCheckChannelsIncomingWebhooksIntegrity(t *testing.T) {
 
 func TestCheckChannelsOutgoingWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkChannelsOutgoingWebhooksIntegrity(supplier)
+			result := checkChannelsOutgoingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -512,13 +508,13 @@ func TestCheckChannelsOutgoingWebhooksIntegrity(t *testing.T) {
 			channelId := channel.Id
 			wh := createOutgoingWebhook(ss, model.NewId(), channelId, model.NewId())
 			dbmap.Delete(channel)
-			result := checkChannelsOutgoingWebhooksIntegrity(supplier)
+			result := checkChannelsOutgoingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: channelId,
-				ChildId: wh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &channelId,
+				ChildId:  &wh.Id,
 			}, data.Records[0])
 			dbmap.Delete(wh)
 		})
@@ -527,25 +523,25 @@ func TestCheckChannelsOutgoingWebhooksIntegrity(t *testing.T) {
 
 func TestCheckChannelsPostsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkChannelsPostsIntegrity(supplier)
+			result := checkChannelsPostsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			post := createPostWithChannelId(ss, model.NewId())
-			result := checkChannelsPostsIntegrity(supplier)
+			result := checkChannelsPostsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: post.ChannelId,
-				ChildId: post.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &post.ChannelId,
+				ChildId:  &post.Id,
 			}, data.Records[0])
 			dbmap.Delete(post)
 		})
@@ -554,26 +550,26 @@ func TestCheckChannelsPostsIntegrity(t *testing.T) {
 
 func TestCheckCommandsCommandWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkCommandsCommandWebhooksIntegrity(supplier)
+			result := checkCommandsCommandWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			commandId := model.NewId()
 			cwh := createCommandWebhook(ss, commandId, model.NewId(), model.NewId())
-			result := checkCommandsCommandWebhooksIntegrity(supplier)
+			result := checkCommandsCommandWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: commandId,
-				ChildId: cwh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &commandId,
+				ChildId:  &cwh.Id,
 			}, data.Records[0])
 			dbmap.Delete(cwh)
 		})
@@ -582,25 +578,26 @@ func TestCheckCommandsCommandWebhooksIntegrity(t *testing.T) {
 
 func TestCheckPostsFileInfoIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkPostsFileInfoIntegrity(supplier)
+			result := checkPostsFileInfoIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			postId := model.NewId()
 			info := createFileInfo(ss, postId, model.NewId())
-			result := checkPostsFileInfoIntegrity(supplier)
+			result := checkPostsFileInfoIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: postId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &postId,
+				ChildId:  &info.Id,
 			}, data.Records[0])
 			dbmap.Delete(info)
 		})
@@ -609,14 +606,27 @@ func TestCheckPostsFileInfoIntegrity(t *testing.T) {
 
 func TestCheckPostsPostsParentIdIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkPostsPostsParentIdIntegrity(supplier)
+			result := checkPostsPostsParentIdIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
+		})
+
+		t.Run("should generate a report with no records", func(t *testing.T) {
+			root := createPost(ss, model.NewId(), model.NewId(), "", "")
+			parent := createPost(ss, model.NewId(), model.NewId(), root.Id, root.Id)
+			post := createPost(ss, model.NewId(), model.NewId(), root.Id, parent.Id)
+			result := checkPostsPostsParentIdIntegrity(store)
+			require.Nil(t, result.Err)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
+			dbmap.Delete(parent)
+			dbmap.Delete(root)
+			dbmap.Delete(post)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -625,13 +635,13 @@ func TestCheckPostsPostsParentIdIntegrity(t *testing.T) {
 			parentId := parent.Id
 			post := createPost(ss, model.NewId(), model.NewId(), root.Id, parent.Id)
 			dbmap.Delete(parent)
-			result := checkPostsPostsParentIdIntegrity(supplier)
+			result := checkPostsPostsParentIdIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: parentId,
-				ChildId: post.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &parentId,
+				ChildId:  &post.Id,
 			}, data.Records[0])
 			dbmap.Delete(root)
 			dbmap.Delete(post)
@@ -641,14 +651,14 @@ func TestCheckPostsPostsParentIdIntegrity(t *testing.T) {
 
 func TestCheckPostsPostsRootIdIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkPostsPostsRootIdIntegrity(supplier)
+			result := checkPostsPostsRootIdIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -656,13 +666,13 @@ func TestCheckPostsPostsRootIdIntegrity(t *testing.T) {
 			rootId := root.Id
 			post := createPost(ss, model.NewId(), model.NewId(), root.Id, root.Id)
 			dbmap.Delete(root)
-			result := checkPostsPostsRootIdIntegrity(supplier)
+			result := checkPostsPostsRootIdIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: rootId,
-				ChildId: post.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &rootId,
+				ChildId:  &post.Id,
 			}, data.Records[0])
 			dbmap.Delete(post)
 		})
@@ -671,25 +681,25 @@ func TestCheckPostsPostsRootIdIntegrity(t *testing.T) {
 
 func TestCheckPostsReactionsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkPostsReactionsIntegrity(supplier)
+			result := checkPostsReactionsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			postId := model.NewId()
 			reaction := createReaction(ss, model.NewId(), postId)
-			result := checkPostsReactionsIntegrity(supplier)
+			result := checkPostsReactionsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: postId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &postId,
 			}, data.Records[0])
 			dbmap.Delete(reaction)
 		})
@@ -698,14 +708,14 @@ func TestCheckPostsReactionsIntegrity(t *testing.T) {
 
 func TestCheckSchemesChannelsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkSchemesChannelsIntegrity(supplier)
+			result := checkSchemesChannelsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -714,13 +724,13 @@ func TestCheckSchemesChannelsIntegrity(t *testing.T) {
 			schemeId := scheme.Id
 			channel := createChannelWithSchemeId(ss, &schemeId)
 			dbmap.Delete(scheme)
-			result := checkSchemesChannelsIntegrity(supplier)
+			result := checkSchemesChannelsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: schemeId,
-				ChildId: channel.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &schemeId,
+				ChildId:  &channel.Id,
 			}, data.Records[0])
 			dbmap.Delete(channel)
 		})
@@ -729,14 +739,14 @@ func TestCheckSchemesChannelsIntegrity(t *testing.T) {
 
 func TestCheckSchemesTeamsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkSchemesTeamsIntegrity(supplier)
+			result := checkSchemesTeamsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -745,13 +755,13 @@ func TestCheckSchemesTeamsIntegrity(t *testing.T) {
 			schemeId := scheme.Id
 			team := createTeamWithSchemeId(ss, &schemeId)
 			dbmap.Delete(scheme)
-			result := checkSchemesTeamsIntegrity(supplier)
+			result := checkSchemesTeamsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: schemeId,
-				ChildId: team.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &schemeId,
+				ChildId:  &team.Id,
 			}, data.Records[0])
 			dbmap.Delete(team)
 		})
@@ -760,14 +770,14 @@ func TestCheckSchemesTeamsIntegrity(t *testing.T) {
 
 func TestCheckSessionsAuditsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkSessionsAuditsIntegrity(supplier)
+			result := checkSessionsAuditsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -776,13 +786,13 @@ func TestCheckSessionsAuditsIntegrity(t *testing.T) {
 			sessionId := session.Id
 			audit := createAudit(ss, userId, sessionId)
 			dbmap.Delete(session)
-			result := checkSessionsAuditsIntegrity(supplier)
+			result := checkSessionsAuditsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: sessionId,
-				ChildId: audit.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &sessionId,
+				ChildId:  &audit.Id,
 			}, data.Records[0])
 			ss.Audit().PermanentDeleteByUser(userId)
 		})
@@ -791,53 +801,102 @@ func TestCheckSessionsAuditsIntegrity(t *testing.T) {
 
 func TestCheckTeamsChannelsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkTeamsChannelsIntegrity(supplier)
+			result := checkTeamsChannelsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			channel := createChannelWithTeamId(ss, model.NewId())
-			result := checkTeamsChannelsIntegrity(supplier)
+			result := checkTeamsChannelsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: channel.TeamId,
-				ChildId: channel.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &channel.TeamId,
+				ChildId:  &channel.Id,
 			}, data.Records[0])
 			dbmap.Delete(channel)
+		})
+
+		t.Run("should not include direct channel with empty teamid", func(t *testing.T) {
+			channel := createChannelWithTeamId(ss, model.NewId())
+			userA := createUser(ss)
+			userB := createUser(ss)
+			direct, err := ss.Channel().CreateDirectChannel(userA, userB)
+			require.NoError(t, err)
+			require.NotNil(t, direct)
+			result := checkTeamsChannelsIntegrity(store)
+			require.Nil(t, result.Err)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Len(t, data.Records, 1)
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &channel.TeamId,
+				ChildId:  &channel.Id,
+			}, data.Records[0])
+			dbmap.Delete(channel)
+			dbmap.Delete(userA)
+			dbmap.Delete(userB)
+			dbmap.Delete(direct)
+		})
+
+		t.Run("should include direct channel with non empty teamid", func(t *testing.T) {
+			channel := createChannelWithTeamId(ss, model.NewId())
+			userA := createUser(ss)
+			userB := createUser(ss)
+			direct, err := ss.Channel().CreateDirectChannel(userA, userB)
+			require.NoError(t, err)
+			require.NotNil(t, direct)
+			_, err = dbmap.Exec(`UPDATE Channels SET TeamId = 'test' WHERE Id = '` + direct.Id + `'`)
+			require.NoError(t, err)
+			result := checkTeamsChannelsIntegrity(store)
+			require.Nil(t, result.Err)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Len(t, data.Records, 2)
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &channel.TeamId,
+				ChildId:  &channel.Id,
+			}, data.Records[0])
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: model.NewString("test"),
+				ChildId:  &direct.Id,
+			}, data.Records[1])
+			dbmap.Delete(channel)
+			dbmap.Delete(userA)
+			dbmap.Delete(userB)
+			dbmap.Delete(direct)
+			dbmap.Exec("DELETE FROM ChannelMembers")
 		})
 	})
 }
 
 func TestCheckTeamsCommandsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkTeamsCommandsIntegrity(supplier)
+			result := checkTeamsCommandsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			teamId := model.NewId()
 			cmd := createCommand(ss, model.NewId(), teamId)
-			result := checkTeamsCommandsIntegrity(supplier)
+			result := checkTeamsCommandsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: teamId,
-				ChildId: cmd.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &teamId,
+				ChildId:  &cmd.Id,
 			}, data.Records[0])
 			dbmap.Delete(cmd)
 		})
@@ -846,26 +905,26 @@ func TestCheckTeamsCommandsIntegrity(t *testing.T) {
 
 func TestCheckTeamsIncomingWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkTeamsIncomingWebhooksIntegrity(supplier)
+			result := checkTeamsIncomingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			teamId := model.NewId()
 			wh := createIncomingWebhook(ss, model.NewId(), model.NewId(), teamId)
-			result := checkTeamsIncomingWebhooksIntegrity(supplier)
+			result := checkTeamsIncomingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: teamId,
-				ChildId: wh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &teamId,
+				ChildId:  &wh.Id,
 			}, data.Records[0])
 			dbmap.Delete(wh)
 		})
@@ -874,26 +933,26 @@ func TestCheckTeamsIncomingWebhooksIntegrity(t *testing.T) {
 
 func TestCheckTeamsOutgoingWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkTeamsOutgoingWebhooksIntegrity(supplier)
+			result := checkTeamsOutgoingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			teamId := model.NewId()
 			wh := createOutgoingWebhook(ss, model.NewId(), model.NewId(), teamId)
-			result := checkTeamsOutgoingWebhooksIntegrity(supplier)
+			result := checkTeamsOutgoingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: teamId,
-				ChildId: wh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &teamId,
+				ChildId:  &wh.Id,
 			}, data.Records[0])
 			dbmap.Delete(wh)
 		})
@@ -902,26 +961,26 @@ func TestCheckTeamsOutgoingWebhooksIntegrity(t *testing.T) {
 
 func TestCheckTeamsTeamMembersIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkTeamsTeamMembersIntegrity(supplier)
+			result := checkTeamsTeamMembersIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			team := createTeam(ss, model.NewId())
 			member := createTeamMember(ss, team.Id, model.NewId())
 			dbmap.Delete(team)
-			result := checkTeamsTeamMembersIntegrity(supplier)
+			result := checkTeamsTeamMembersIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: team.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &team.Id,
 			}, data.Records[0])
 			ss.Team().RemoveAllMembersByTeam(member.TeamId)
 		})
@@ -930,14 +989,14 @@ func TestCheckTeamsTeamMembersIntegrity(t *testing.T) {
 
 func TestCheckUsersAuditsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersAuditsIntegrity(supplier)
+			result := checkUsersAuditsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -945,13 +1004,13 @@ func TestCheckUsersAuditsIntegrity(t *testing.T) {
 			userId := user.Id
 			audit := createAudit(ss, userId, model.NewId())
 			dbmap.Delete(user)
-			result := checkUsersAuditsIntegrity(supplier)
+			result := checkUsersAuditsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: audit.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &audit.Id,
 			}, data.Records[0])
 			ss.Audit().PermanentDeleteByUser(userId)
 		})
@@ -960,26 +1019,26 @@ func TestCheckUsersAuditsIntegrity(t *testing.T) {
 
 func TestCheckUsersCommandWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersCommandWebhooksIntegrity(supplier)
+			result := checkUsersCommandWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			userId := model.NewId()
 			cwh := createCommandWebhook(ss, model.NewId(), userId, model.NewId())
-			result := checkUsersCommandWebhooksIntegrity(supplier)
+			result := checkUsersCommandWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: cwh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &cwh.Id,
 			}, data.Records[0])
 			dbmap.Delete(cwh)
 		})
@@ -988,25 +1047,25 @@ func TestCheckUsersCommandWebhooksIntegrity(t *testing.T) {
 
 func TestCheckUsersChannelsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersChannelsIntegrity(supplier)
+			result := checkUsersChannelsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			channel := createChannelWithCreatorId(ss, model.NewId())
-			result := checkUsersChannelsIntegrity(supplier)
+			result := checkUsersChannelsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: channel.CreatorId,
-				ChildId: channel.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &channel.CreatorId,
+				ChildId:  &channel.Id,
 			}, data.Records[0])
 			dbmap.Delete(channel)
 		})
@@ -1015,14 +1074,14 @@ func TestCheckUsersChannelsIntegrity(t *testing.T) {
 
 func TestCheckUsersChannelMemberHistoryIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersChannelMemberHistoryIntegrity(supplier)
+			result := checkUsersChannelMemberHistoryIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1030,12 +1089,12 @@ func TestCheckUsersChannelMemberHistoryIntegrity(t *testing.T) {
 			channel := createChannel(ss, model.NewId(), model.NewId())
 			cmh := createChannelMemberHistory(ss, channel.Id, user.Id)
 			dbmap.Delete(user)
-			result := checkUsersChannelMemberHistoryIntegrity(supplier)
+			result := checkUsersChannelMemberHistoryIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: cmh.UserId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &cmh.UserId,
 			}, data.Records[0])
 			dbmap.Delete(channel)
 			dbmap.Exec(`DELETE FROM ChannelMemberHistory`)
@@ -1045,14 +1104,14 @@ func TestCheckUsersChannelMemberHistoryIntegrity(t *testing.T) {
 
 func TestCheckUsersChannelMembersIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersChannelMembersIntegrity(supplier)
+			result := checkUsersChannelMembersIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1060,12 +1119,12 @@ func TestCheckUsersChannelMembersIntegrity(t *testing.T) {
 			channel := createChannelWithCreatorId(ss, user.Id)
 			member := createChannelMember(ss, channel.Id, user.Id)
 			dbmap.Delete(user)
-			result := checkUsersChannelMembersIntegrity(supplier)
+			result := checkUsersChannelMembersIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: member.UserId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &member.UserId,
 			}, data.Records[0])
 			dbmap.Delete(channel)
 			ss.Channel().PermanentDeleteMembersByUser(member.UserId)
@@ -1075,26 +1134,26 @@ func TestCheckUsersChannelMembersIntegrity(t *testing.T) {
 
 func TestCheckUsersCommandsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersCommandsIntegrity(supplier)
+			result := checkUsersCommandsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			userId := model.NewId()
 			cmd := createCommand(ss, userId, model.NewId())
-			result := checkUsersCommandsIntegrity(supplier)
+			result := checkUsersCommandsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: cmd.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &cmd.Id,
 			}, data.Records[0])
 			dbmap.Delete(cmd)
 		})
@@ -1103,14 +1162,14 @@ func TestCheckUsersCommandsIntegrity(t *testing.T) {
 
 func TestCheckUsersCompliancesIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersCompliancesIntegrity(supplier)
+			result := checkUsersCompliancesIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1118,13 +1177,13 @@ func TestCheckUsersCompliancesIntegrity(t *testing.T) {
 			userId := user.Id
 			compliance := createCompliance(ss, userId)
 			dbmap.Delete(user)
-			result := checkUsersCompliancesIntegrity(supplier)
+			result := checkUsersCompliancesIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: compliance.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &compliance.Id,
 			}, data.Records[0])
 			dbmap.Delete(compliance)
 		})
@@ -1133,14 +1192,14 @@ func TestCheckUsersCompliancesIntegrity(t *testing.T) {
 
 func TestCheckUsersEmojiIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersEmojiIntegrity(supplier)
+			result := checkUsersEmojiIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1148,13 +1207,13 @@ func TestCheckUsersEmojiIntegrity(t *testing.T) {
 			userId := user.Id
 			emoji := createEmoji(ss, userId)
 			dbmap.Delete(user)
-			result := checkUsersEmojiIntegrity(supplier)
+			result := checkUsersEmojiIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: emoji.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &emoji.Id,
 			}, data.Records[0])
 			dbmap.Delete(emoji)
 		})
@@ -1163,14 +1222,14 @@ func TestCheckUsersEmojiIntegrity(t *testing.T) {
 
 func TestCheckUsersFileInfoIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersFileInfoIntegrity(supplier)
+			result := checkUsersFileInfoIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1178,12 +1237,13 @@ func TestCheckUsersFileInfoIntegrity(t *testing.T) {
 			userId := user.Id
 			info := createFileInfo(ss, model.NewId(), userId)
 			dbmap.Delete(user)
-			result := checkUsersFileInfoIntegrity(supplier)
+			result := checkUsersFileInfoIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &info.Id,
 			}, data.Records[0])
 			dbmap.Delete(info)
 		})
@@ -1192,26 +1252,26 @@ func TestCheckUsersFileInfoIntegrity(t *testing.T) {
 
 func TestCheckUsersIncomingWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersIncomingWebhooksIntegrity(supplier)
+			result := checkUsersIncomingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			userId := model.NewId()
 			wh := createIncomingWebhook(ss, userId, model.NewId(), model.NewId())
-			result := checkUsersIncomingWebhooksIntegrity(supplier)
+			result := checkUsersIncomingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: wh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &wh.Id,
 			}, data.Records[0])
 			dbmap.Delete(wh)
 		})
@@ -1220,14 +1280,14 @@ func TestCheckUsersIncomingWebhooksIntegrity(t *testing.T) {
 
 func TestCheckUsersOAuthAccessDataIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersOAuthAccessDataIntegrity(supplier)
+			result := checkUsersOAuthAccessDataIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1235,13 +1295,13 @@ func TestCheckUsersOAuthAccessDataIntegrity(t *testing.T) {
 			userId := user.Id
 			ad := createOAuthAccessData(ss, userId)
 			dbmap.Delete(user)
-			result := checkUsersOAuthAccessDataIntegrity(supplier)
+			result := checkUsersOAuthAccessDataIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: ad.Token,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &ad.Token,
 			}, data.Records[0])
 			ss.OAuth().RemoveAccessData(ad.Token)
 		})
@@ -1250,14 +1310,14 @@ func TestCheckUsersOAuthAccessDataIntegrity(t *testing.T) {
 
 func TestCheckUsersOAuthAppsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersOAuthAppsIntegrity(supplier)
+			result := checkUsersOAuthAppsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1265,13 +1325,13 @@ func TestCheckUsersOAuthAppsIntegrity(t *testing.T) {
 			userId := user.Id
 			app := createOAuthApp(ss, userId)
 			dbmap.Delete(user)
-			result := checkUsersOAuthAppsIntegrity(supplier)
+			result := checkUsersOAuthAppsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: app.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &app.Id,
 			}, data.Records[0])
 			ss.OAuth().DeleteApp(app.Id)
 		})
@@ -1280,14 +1340,14 @@ func TestCheckUsersOAuthAppsIntegrity(t *testing.T) {
 
 func TestCheckUsersOAuthAuthDataIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersOAuthAuthDataIntegrity(supplier)
+			result := checkUsersOAuthAuthDataIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1295,13 +1355,13 @@ func TestCheckUsersOAuthAuthDataIntegrity(t *testing.T) {
 			userId := user.Id
 			ad := createOAuthAuthData(ss, userId)
 			dbmap.Delete(user)
-			result := checkUsersOAuthAuthDataIntegrity(supplier)
+			result := checkUsersOAuthAuthDataIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: ad.Code,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &ad.Code,
 			}, data.Records[0])
 			ss.OAuth().RemoveAuthData(ad.Code)
 		})
@@ -1310,26 +1370,26 @@ func TestCheckUsersOAuthAuthDataIntegrity(t *testing.T) {
 
 func TestCheckUsersOutgoingWebhooksIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersOutgoingWebhooksIntegrity(supplier)
+			result := checkUsersOutgoingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			userId := model.NewId()
 			wh := createOutgoingWebhook(ss, userId, model.NewId(), model.NewId())
-			result := checkUsersOutgoingWebhooksIntegrity(supplier)
+			result := checkUsersOutgoingWebhooksIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: wh.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &wh.Id,
 			}, data.Records[0])
 			dbmap.Delete(wh)
 		})
@@ -1338,25 +1398,25 @@ func TestCheckUsersOutgoingWebhooksIntegrity(t *testing.T) {
 
 func TestCheckUsersPostsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersPostsIntegrity(supplier)
+			result := checkUsersPostsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			post := createPostWithUserId(ss, model.NewId())
-			result := checkUsersPostsIntegrity(supplier)
+			result := checkUsersPostsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: post.UserId,
-				ChildId: post.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &post.UserId,
+				ChildId:  &post.Id,
 			}, data.Records[0])
 			dbmap.Delete(post)
 		})
@@ -1365,43 +1425,60 @@ func TestCheckUsersPostsIntegrity(t *testing.T) {
 
 func TestCheckUsersPreferencesIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersPreferencesIntegrity(supplier)
+			result := checkUsersPreferencesIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
+		})
+
+		t.Run("should generate a report with no records", func(t *testing.T) {
+			user := createUser(ss)
+			require.NotNil(t, user)
+			userId := user.Id
+			preferences := createPreferences(ss, userId)
+			require.NotNil(t, preferences)
+			result := checkUsersPreferencesIntegrity(store)
+			require.Nil(t, result.Err)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
+			dbmap.Exec(`DELETE FROM Preferences`)
+			dbmap.Delete(user)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			user := createUser(ss)
+			require.NotNil(t, user)
 			userId := user.Id
 			preferences := createPreferences(ss, userId)
+			require.NotNil(t, preferences)
 			dbmap.Delete(user)
-			result := checkUsersPreferencesIntegrity(supplier)
+			result := checkUsersPreferencesIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
 			}, data.Records[0])
-			dbmap.Delete(preferences)
+			dbmap.Exec(`DELETE FROM Preferences`)
+			dbmap.Delete(user)
 		})
 	})
 }
 
 func TestCheckUsersReactionsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersReactionsIntegrity(supplier)
+			result := checkUsersReactionsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1409,12 +1486,12 @@ func TestCheckUsersReactionsIntegrity(t *testing.T) {
 			userId := user.Id
 			reaction := createReaction(ss, user.Id, model.NewId())
 			dbmap.Delete(user)
-			result := checkUsersReactionsIntegrity(supplier)
+			result := checkUsersReactionsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
 			}, data.Records[0])
 			dbmap.Delete(reaction)
 		})
@@ -1423,26 +1500,26 @@ func TestCheckUsersReactionsIntegrity(t *testing.T) {
 
 func TestCheckUsersSessionsIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersSessionsIntegrity(supplier)
+			result := checkUsersSessionsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
 			userId := model.NewId()
 			session := createSession(ss, userId)
-			result := checkUsersSessionsIntegrity(supplier)
+			result := checkUsersSessionsIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: session.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &session.Id,
 			}, data.Records[0])
 			dbmap.Delete(session)
 		})
@@ -1451,14 +1528,14 @@ func TestCheckUsersSessionsIntegrity(t *testing.T) {
 
 func TestCheckUsersStatusIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersStatusIntegrity(supplier)
+			result := checkUsersStatusIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1466,12 +1543,12 @@ func TestCheckUsersStatusIntegrity(t *testing.T) {
 			userId := user.Id
 			status := createStatus(ss, user.Id)
 			dbmap.Delete(user)
-			result := checkUsersStatusIntegrity(supplier)
+			result := checkUsersStatusIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
 			}, data.Records[0])
 			dbmap.Delete(status)
 		})
@@ -1480,14 +1557,14 @@ func TestCheckUsersStatusIntegrity(t *testing.T) {
 
 func TestCheckUsersTeamMembersIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersTeamMembersIntegrity(supplier)
+			result := checkUsersTeamMembersIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1495,12 +1572,12 @@ func TestCheckUsersTeamMembersIntegrity(t *testing.T) {
 			team := createTeam(ss, user.Id)
 			member := createTeamMember(ss, team.Id, user.Id)
 			dbmap.Delete(user)
-			result := checkUsersTeamMembersIntegrity(supplier)
+			result := checkUsersTeamMembersIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: member.UserId,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &member.UserId,
 			}, data.Records[0])
 			ss.Team().RemoveAllMembersByTeam(member.TeamId)
 			dbmap.Delete(team)
@@ -1510,14 +1587,14 @@ func TestCheckUsersTeamMembersIntegrity(t *testing.T) {
 
 func TestCheckUsersUserAccessTokensIntegrity(t *testing.T) {
 	StoreTest(t, func(t *testing.T, ss store.Store) {
-		supplier := ss.(*store.LayeredStore).DatabaseLayer.(*SqlSupplier)
-		dbmap := supplier.GetMaster()
+		store := ss.(*SqlStore)
+		dbmap := store.GetMaster()
 
 		t.Run("should generate a report with no records", func(t *testing.T) {
-			result := checkUsersUserAccessTokensIntegrity(supplier)
+			result := checkUsersUserAccessTokensIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
-			require.Len(t, data.Records, 0)
+			data := result.Data.(model.RelationalIntegrityCheckData)
+			require.Empty(t, data.Records)
 		})
 
 		t.Run("should generate a report with one record", func(t *testing.T) {
@@ -1525,13 +1602,13 @@ func TestCheckUsersUserAccessTokensIntegrity(t *testing.T) {
 			userId := user.Id
 			uat := createUserAccessToken(ss, user.Id)
 			dbmap.Delete(user)
-			result := checkUsersUserAccessTokensIntegrity(supplier)
+			result := checkUsersUserAccessTokensIntegrity(store)
 			require.Nil(t, result.Err)
-			data := result.Data.(store.RelationalIntegrityCheckData)
+			data := result.Data.(model.RelationalIntegrityCheckData)
 			require.Len(t, data.Records, 1)
-			require.Equal(t, store.OrphanedRecord{
-				ParentId: userId,
-				ChildId: uat.Id,
+			require.Equal(t, model.OrphanedRecord{
+				ParentId: &userId,
+				ChildId:  &uat.Id,
 			}, data.Records[0])
 			ss.UserAccessToken().Delete(uat.Id)
 		})
