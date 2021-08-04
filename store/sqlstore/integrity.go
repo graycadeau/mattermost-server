@@ -4,10 +4,10 @@
 package sqlstore
 
 import (
-	"github.com/mattermost/mattermost-server/v5/mlog"
-	"github.com/mattermost/mattermost-server/v5/model"
-
 	sq "github.com/Masterminds/squirrel"
+
+	"github.com/mattermost/mattermost-server/v6/model"
+	"github.com/mattermost/mattermost-server/v6/shared/mlog"
 )
 
 type relationalCheckConfig struct {
@@ -66,7 +66,7 @@ func checkParentChildIntegrity(ss *SqlStore, config relationalCheckConfig) model
 	config.sortRecords = true
 	data.Records, result.Err = getOrphanedRecords(ss, config)
 	if result.Err != nil {
-		mlog.Error(result.Err.Error())
+		mlog.Error("Error while getting orphaned records", mlog.Err(result.Err))
 		return result
 	}
 	data.ParentName = config.parentName
@@ -215,7 +215,7 @@ func checkTeamsChannelsIntegrity(ss *SqlStore) model.IntegrityCheckResult {
 		parentIdAttr: "TeamId",
 		childName:    "Channels",
 		childIdAttr:  "Id",
-		filter:       sq.NotEq{"CT.Type": []string{model.CHANNEL_DIRECT, model.CHANNEL_GROUP}},
+		filter:       sq.NotEq{"CT.Type": []model.ChannelType{model.ChannelTypeDirect, model.ChannelTypeGroup}},
 	})
 	res2 := checkParentChildIntegrity(ss, relationalCheckConfig{
 		parentName:         "Teams",
@@ -223,7 +223,7 @@ func checkTeamsChannelsIntegrity(ss *SqlStore) model.IntegrityCheckResult {
 		childName:          "Channels",
 		childIdAttr:        "Id",
 		canParentIdBeEmpty: true,
-		filter:             sq.Eq{"CT.Type": []string{model.CHANNEL_DIRECT, model.CHANNEL_GROUP}},
+		filter:             sq.Eq{"CT.Type": []model.ChannelType{model.ChannelTypeDirect, model.ChannelTypeGroup}},
 	})
 	data1 := res1.Data.(model.RelationalIntegrityCheckData)
 	data2 := res2.Data.(model.RelationalIntegrityCheckData)

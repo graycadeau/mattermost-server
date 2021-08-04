@@ -6,9 +6,10 @@ package api4
 import (
 	"testing"
 
-	"github.com/mattermost/mattermost-server/v5/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mattermost/mattermost-server/v6/model"
 )
 
 func TestCreateCategoryForTeamForUser(t *testing.T) {
@@ -50,7 +51,7 @@ func TestCreateCategoryForTeamForUser(t *testing.T) {
 		// Have another user create a channel that user isn't a part of
 		channel, resp := th.SystemAdminClient.CreateChannel(&model.Channel{
 			TeamId: th.BasicTeam.Id,
-			Type:   model.CHANNEL_OPEN,
+			Type:   model.ChannelTypeOpen,
 			Name:   "testchannel",
 		})
 		require.Nil(t, resp.Error)
@@ -234,7 +235,7 @@ func TestUpdateCategoryForTeamForUser(t *testing.T) {
 		// Have another user create a channel that user isn't a part of
 		channel, resp := th.SystemAdminClient.CreateChannel(&model.Channel{
 			TeamId: th.BasicTeam.Id,
-			Type:   model.CHANNEL_OPEN,
+			Type:   model.ChannelTypeOpen,
 			Name:   "testchannel",
 		})
 		require.Nil(t, resp.Error)
@@ -380,7 +381,7 @@ func TestUpdateCategoriesForTeamForUser(t *testing.T) {
 		// Have another user create a channel that user isn't a part of
 		channel, resp := th.SystemAdminClient.CreateChannel(&model.Channel{
 			TeamId: th.BasicTeam.Id,
-			Type:   model.CHANNEL_OPEN,
+			Type:   model.ChannelTypeOpen,
 			Name:   "testchannel",
 		})
 		require.Nil(t, resp.Error)
@@ -437,7 +438,7 @@ func TestUpdateCategoriesForTeamForUser(t *testing.T) {
 
 func setupUserForSubtest(t *testing.T, th *TestHelper) (*model.User, *model.Client4) {
 	password := "password"
-	user, err := th.App.CreateUser(&model.User{
+	user, err := th.App.CreateUser(th.Context, &model.User{
 		Email:    th.GenerateTestEmail(),
 		Username: "user_" + model.NewId(),
 		Password: password,

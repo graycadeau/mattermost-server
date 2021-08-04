@@ -12,13 +12,13 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 
-	"github.com/mattermost/mattermost-server/v5/mlog"
-	"github.com/mattermost/mattermost-server/v5/model"
-
 	// Load the MySQL driver
 	_ "github.com/go-sql-driver/mysql"
 	// Load the Postgres driver
 	_ "github.com/lib/pq"
+
+	"github.com/mattermost/mattermost-server/v6/model"
+	"github.com/mattermost/mattermost-server/v6/shared/mlog"
 )
 
 // MaxWriteLength defines the maximum length accepted for write to the Configurations or
@@ -345,9 +345,4 @@ func (ds *DatabaseStore) String() string {
 // Close cleans up resources associated with the store.
 func (ds *DatabaseStore) Close() error {
 	return ds.db.Close()
-}
-
-// Watch nothing on memory store
-func (ds *DatabaseStore) Watch(_ func()) error {
-	return nil
 }

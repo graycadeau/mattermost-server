@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mattermost/mattermost-server/v5/services/cache"
-
 	"github.com/cespare/xxhash/v2"
+
+	"github.com/mattermost/mattermost-server/v6/services/cache"
 )
 
 const (

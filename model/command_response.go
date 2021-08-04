@@ -9,12 +9,12 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/mattermost/mattermost-server/v5/utils/jsonutils"
+	"github.com/mattermost/mattermost-server/v6/utils/jsonutils"
 )
 
 const (
-	COMMAND_RESPONSE_TYPE_IN_CHANNEL = "in_channel"
-	COMMAND_RESPONSE_TYPE_EPHEMERAL  = "ephemeral"
+	CommandResponseTypeInChannel = "in_channel"
+	CommandResponseTypeEphemeral = "ephemeral"
 )
 
 type CommandResponse struct {
@@ -30,11 +30,6 @@ type CommandResponse struct {
 	SkipSlackParsing bool               `json:"skip_slack_parsing"` // Set to `true` to skip the Slack-compatibility handling of Text.
 	Attachments      []*SlackAttachment `json:"attachments"`
 	ExtraResponses   []*CommandResponse `json:"extra_responses"`
-}
-
-func (o *CommandResponse) ToJson() string {
-	b, _ := json.Marshal(o)
-	return string(b)
 }
 
 func CommandResponseFromHTTPBody(contentType string, body io.Reader) (*CommandResponse, error) {
@@ -62,7 +57,7 @@ func CommandResponseFromJson(data io.Reader) (*CommandResponse, error) {
 	var o CommandResponse
 	err = json.Unmarshal(b, &o)
 	if err != nil {
-		return nil, jsonutils.HumanizeJsonError(err, b)
+		return nil, jsonutils.HumanizeJSONError(err, b)
 	}
 
 	o.Attachments = StringifySlackFieldValue(o.Attachments)
